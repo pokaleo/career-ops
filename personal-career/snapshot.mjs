@@ -55,23 +55,48 @@ export function profileHash(s, settings) {
   const sources = s.sources.filter(x => ids.has(x.id)).map(({ id, contentHash, completeness }) => ({ id, contentHash, completeness })).sort((a,b) => a.id.localeCompare(b.id));
   return contentHash({ claims, sources, settings });
 }
+const FAMILY_LABELS = { 'applied-ai': 'Applied AI Engineer', 'ai-product': 'AI Product Engineer / Manager', 'forward-deployed': 'Forward Deployed Engineer',
+  'architect-lead': 'AI / Solutions Architect or Tech Lead', 'backend-platform': 'Backend / Platform Engineer' };
+const gbp = n => `£${Number(n).toLocaleString('en-GB')}`;
+/**
+ * Upstream-compatible projections of confirmed evidence. cv.md is NOT projected:
+ * it is pulled from the Notion CV source (see `profile-propose`) so it keeps the
+ * structure upstream's CV checks read. Write these only through profile-propose.
+ */
 export function projectProfile(s, settings) {
   validateSnapshot(s); validateSettings(settings);
   blocked(s.sources.every(x => x.completeness === 'complete'), 'Profile requires complete evidence sources');
   const claims = permittedClaims(s);
   const lines = claims.map(c => `- ${c.value}${c.qualifier ? ` [${c.qualifier}]` : ''} (${c.sourceId} · ${c.locator})`);
-  const profileMarkdown = `# ${settings.candidate.name}\n\n${settings.candidate.headline}\n\n${lines.join('\n')}\n`;
+  const claimsMarkdown = `## Confirmed evidence (from Notion)\n\n${lines.join('\n')}\n`;
+  const { compensation: comp, sponsorship: sp, location: loc } = settings;
+  const where = [loc.london && 'London', loc.ukRemoteFromLondon && 'UK remote (workable from London)'].filter(Boolean).join(' or ');
+  const briefMarkdown = [
+    `# ${settings.candidate.name} — Triage Brief`, '',
+    '## Identity', `${settings.candidate.headline}. ${where}${loc.hybridPreferred ? ', hybrid preferred' : ''}. ${sp.required ? `Needs visa sponsorship for a new employer (~${sp.months} months).` : 'No sponsorship needed.'}`, '',
+    '## Target Archetypes', '| # | Archetype | What they buy (your proof) |', '|---|-----------|----------------------------|',
+    ...settings.roleFamilies.map((f, i) => `| ${i + 1} | **${FAMILY_LABELS[f] ?? f}** | see Proof Points |`), '',
+    '## Proof Points (use exact metrics in matching)', ...lines, '',
+    '## Comp Strategy', '| Target | Requirement |', '|--------|-------------|',
+    `| ${gbp(comp.targetBaseGBP[0])}–${gbp(comp.targetBaseGBP[1])}+ | annual base; bonus, equity and OTE are separate |`, '',
+    `**Hard floor: ${gbp(comp.minimumBaseGBP)} annual base. Below that, FAIL regardless of other signals.**`, '',
+    '## Location Scoring', `- ${where} → **5.0**`, '- Attendance, travel, hours and on-call → judged case by case, never a hidden exclusion', '- Outside London and not UK-remote → **FAIL**', '',
+    '## Hard DQ Criteria — instant FAIL (< 3.0)',
+    `- Stated annual base ceiling below ${gbp(comp.minimumBaseGBP)} (bonus/OTE never counts toward base)`,
+    ...(sp.required ? ['- Employer states it will not sponsor a visa (unknown sponsorship is a verify flag, not a fail)'] : []),
+    '- Role cannot be done from London or UK remote', '',
+  ].join('\n');
   return {
-    cvMarkdown: profileMarkdown, profileMarkdown,
+    claimsMarkdown, briefMarkdown,
     profileYaml: JSON.stringify({
       candidate: { full_name: settings.candidate.name, title: settings.candidate.headline },
-      location: { needs_sponsorship: settings.sponsorship.required, authorized_in: settings.sponsorship.unrestrictedCountries,
-        visa_status: settings.sponsorship.required ? `Sponsorship required for a new employer; planning need ${settings.sponsorship.months} months. Existing permission does not establish unrestricted new-employer rights.` : 'Sponsorship not required according to current candidate settings.' },
-      compensation: { minimum: `£${settings.compensation.minimumBaseGBP} annual base`, currency: 'GBP',
-        target_range: `£${settings.compensation.targetBaseGBP.join('–£')} annual base; higher welcome; bonus and equity separate` },
-      target_roles: { primary: settings.roleFamilies },
+      location: { needs_sponsorship: sp.required, authorized_in: sp.unrestrictedCountries,
+        visa_status: sp.required ? `Sponsorship required for a new employer; planning need ${sp.months} months. Existing permission does not establish unrestricted new-employer rights.` : 'Sponsorship not required according to current candidate settings.' },
+      compensation: { minimum: `${gbp(comp.minimumBaseGBP)} annual base`, currency: 'GBP',
+        target_range: `${gbp(comp.targetBaseGBP[0])}–${gbp(comp.targetBaseGBP[1])} annual base; higher welcome; bonus and equity separate` },
+      target_roles: { primary: settings.roleFamilies.map(f => FAMILY_LABELS[f] ?? f) },
+      // Above the 5.0 maximum: pipeline/batch never tailor a CV before selection.
+      auto_pdf_score_threshold: 5.1,
     }, null, 2),
-    briefMarkdown: `${profileMarkdown}\nMinimum annual GBP base: ${settings.compensation.minimumBaseGBP}. Role families: ${settings.roleFamilies.join(', ')}.\n`,
-    customMarkdown: '# Personal workflow\n\nRun on-demand only. Present shortlist first; tailor only explicitly selected roles. User submits. Unknown salary/sponsorship require verification. London or UK remote from London; hybrid preferred. Assess attendance, hours, on-call and travel case by case. Never treat an expected promotion as attained.\n',
   };
 }

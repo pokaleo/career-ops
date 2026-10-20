@@ -8,6 +8,9 @@ import { planUpdate, journalOperation, reconcileOperation } from './notion-plan.
 import { projectProfile } from './snapshot.mjs';
 import { prepareMaterials, saveMaterialPayload, renderMaterials, verifyArtifacts } from './materials.mjs';
 import { buildSupportContext, validateEvent, draftActions } from './support.mjs';
+import { parseReport } from './report.mjs';
+import { mirrorTracker, STAGE_TO_STATE } from './tracker-mirror.mjs';
+import { syncStatus, recordPush, profilePropose, profileAccept } from './sync.mjs';
 
 try {
   const [command, file = '-'] = process.argv.slice(2);
@@ -32,10 +35,17 @@ try {
     case 'support': result = buildSupportContext(input); break;
     case 'event-check': result = validateEvent(input.event, input.context); break;
     case 'actions': result = draftActions(input.context); break;
+    case 'report-job': { const r = parseReport(rt, input.reportPath); result = { company: r.company, title: r.title, url: r.url, jdText: r.jdText, reportNumber: r.reportNumber, reportPath: r.reportPath, score: r.score, confidence: r.confidence, decision: r.decision, legitimacy: r.legitimacy }; break; }
+    case 'stage-map': result = STAGE_TO_STATE; break;
+    case 'mirror-tracker': result = mirrorTracker(input, rt); break;
+    case 'sync-status': result = syncStatus(rt); break;
+    case 'record-push': result = recordPush(input, rt); break;
+    case 'profile-propose': result = profilePropose(input, rt); break;
+    case 'profile-accept': result = profileAccept(input, rt); break;
     default: check(false, `Unknown command: ${command}`);
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (result.conflicts?.length || (command === 'reconcile' && !['verified','no_op'].includes(result.state))
+  if ((Array.isArray(result.conflicts) && result.conflicts.length) || (command === 'reconcile' && !['verified','no_op'].includes(result.state))
     || (command === 'materials-verify' && !result.verified)) process.exitCode = 3;
 } catch (error) {
   process.stderr.write(`${error.message}\n`);

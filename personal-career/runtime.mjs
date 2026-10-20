@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, realpathSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync, rmdirSync } from 'node:fs';
 import { resolve, relative, dirname, join, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { getCareerOpsRoot } from '../path-resolver.mjs';
 import { check, blocked, safeId } from './contracts.mjs';
 
@@ -15,12 +16,29 @@ export function inside(root, path) {
   const rel = relative(root, path);
   return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
 }
+/** True when git would never stage `path`: it is ignored and nothing under it is tracked. */
+export function gitIgnored(repoRoot, path) {
+  const run = args => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', shell: false });
+  if (run(['check-ignore', '-q', '--', path]).status !== 0) return false;
+  const tracked = run(['ls-files', '--', path]);
+  return tracked.status === 0 && tracked.stdout.trim() === '';
+}
+/**
+ * A data root inside the checkout is accepted only when git ignores the whole
+ * folder. The probe is a sentinel directly under the data root: upstream's
+ * unanchored user-layer rules (`cv.md`, `data/*`) would match a probe like
+ * foo/cv.md while foo/reports/ or foo/output/ stay stageable. The checkout
+ * root itself is refused — use a subfolder such as career-data/.
+ */
 export function resolveRuntime({ repoRoot = dirname(dirname(fileURLToPath(import.meta.url))), dataRoot } = {}) {
   repoRoot = canonicalPath(repoRoot);
   dataRoot = canonicalPath(dataRoot ?? getCareerOpsRoot());
-  check(!inside(repoRoot, dataRoot), 'Private data root must be outside the checkout');
   const stateRoot = canonicalPath(join(dataRoot, 'data', 'personal-career'));
-  check(inside(dataRoot, stateRoot) && !inside(repoRoot, stateRoot), 'Invalid state path');
+  check(inside(dataRoot, stateRoot), 'Invalid state path');
+  if (inside(repoRoot, dataRoot)) {
+    check(dataRoot !== repoRoot && gitIgnored(repoRoot, join(dataRoot, '.personal-career-probe')),
+      'Data root inside the checkout must be a git-ignored subfolder (add it to .gitignore)');
+  }
   return { repoRoot, dataRoot, stateRoot };
 }
 export function boundedPath(root, path) {

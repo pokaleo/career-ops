@@ -12,9 +12,13 @@ const eventField = k => /date|contact|recruiter/i.test(k);
  * writing. Notion has no compare-and-swap; a later readback is still mandatory.
  */
 export function planUpdate(base, current, intent, ownership) {
-  keys(intent, ['operationId','kind','identity','properties','body','requestRef','writeDisposition','confirmedEvent','schemaHash'], 'Notion intent');
+  keys(intent, ['operationId','kind','identity','properties','body','sections','artifact','requestRef','writeDisposition','confirmedEvent','schemaHash'], 'Notion intent');
   safeId(intent.operationId); string(intent.identity, 'identity');
-  oneOf(intent.kind, ['assess','select','materials','event'], 'Notion intent kind');
+  oneOf(intent.kind, ['assess','select','materials','event','sync'], 'Notion intent kind');
+  check(intent.body === undefined || intent.sections === undefined, 'Use body or sections, not both');
+  // A sync pushes one local file; the plan records which file and what it intends to show.
+  if (intent.kind === 'sync') { keys(intent.artifact, ['path','hash'], 'sync artifact'); string(intent.artifact.path, 'artifact path'); string(intent.artifact.hash, 'artifact hash'); }
+  else check(intent.artifact === undefined, 'Only sync intents carry an artifact');
   blocked(intent.writeDisposition !== 'deferred', 'Deferred correction cannot be written');
   const create = !base && !current; check(create || (base && current && base.pageId === current.pageId), 'Page identity mismatch');
   if (intent.kind === 'select') string(intent.requestRef, 'Selection request reference');
@@ -44,20 +48,25 @@ export function planUpdate(base, current, intent, ownership) {
     if (!create && key !== 'CV Version' && !equal(old, now)) { conflicts.push(key); continue; }
     expected[key] = now; properties[key] = target;
   }
-  if (intent.body !== undefined) {
-    string(ownership.section, 'Owned section'); string(intent.body, 'Managed body');
-    if (current?.duplicateMarkers?.includes(ownership.section)) conflicts.push('duplicate_body_marker');
-    else {
-      const old = base?.sections?.[ownership.section] ?? null, now = current?.sections?.[ownership.section] ?? null;
-      if (!bodyEqual(now, intent.body)) {
-        if (!bodyEqual(old, now)) conflicts.push('body');
-        else { expectedSections[ownership.section] = now; sections[ownership.section] = intent.body; }
-      }
-    }
+  // `body` targets the single legacy section; `sections` maps several owned
+  // sections (e.g. career-workflow, career-workflow-interview) to their bodies.
+  const owned = ownership.sections ?? (ownership.section ? [ownership.section] : []);
+  const bodies = intent.sections ?? (intent.body !== undefined ? { [ownership.section]: intent.body } : {});
+  check(bodies && typeof bodies === 'object' && !Array.isArray(bodies), 'Managed sections');
+  for (const [name, body] of Object.entries(bodies)) {
+    string(name, 'Owned section'); string(body, 'Managed body');
+    check(owned.includes(name), `Section is not owned: ${name}`);
+    const label = kind => (intent.sections ? `${kind}:${name}` : kind);
+    if (current?.duplicateMarkers?.includes(name)) { conflicts.push(label('duplicate_body_marker')); continue; }
+    const old = base?.sections?.[name] ?? null, now = current?.sections?.[name] ?? null;
+    if (bodyEqual(now, body)) continue;
+    if (!bodyEqual(old, now)) conflicts.push(label('body'));
+    else { expectedSections[name] = now; sections[name] = body; }
   }
   return { version: 1, operationId: intent.operationId, kind: create ? 'create' : 'update', identity: intent.identity,
     pageId: current?.pageId ?? null, schemaHash: current?.schemaHash ?? intent.schemaHash ?? null,
-    sourceHash: contentHash(base ?? {}), expected, expectedSections, properties, sections, conflicts };
+    sourceHash: contentHash(base ?? {}), expected, expectedSections, properties, sections, conflicts,
+    ...(intent.artifact ? { artifact: { ...intent.artifact, sectionHashes: Object.fromEntries(Object.entries(bodies).map(([k, v]) => [k, contentHash(v)])) } } : {}) };
 }
 export function journalOperation(plan, rt) {
   safeId(plan.operationId); blocked(plan.conflicts.length === 0, 'Conflicted plan cannot be journaled for execution');

@@ -11,7 +11,7 @@ import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs
 export function materialFixture(t, format = 'text') {
   const rt = resolveRuntime(temporaryRoots(t)), snapshot = snapshotFixture(), settings = settingsFixture();
   const run = ingestRun(snapshot,[jobFixture()],rt,{settings,brief:'Fictional evidence'});
-  saveAssessments(run.runId,[assessmentFixture(run)],rt);
+  saveAssessments(run.runId,[assessmentFixture(run,rt.dataRoot)],rt);
   const input = { jobId:run.jobs[0].id, runId:run.runId, snapshot,settings,currentJob:run.jobs[0],claimIds:['promotion'],format };
   return {rt,run,input};
 }

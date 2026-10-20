@@ -12,7 +12,7 @@ import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs
 test('selection is explicit, hash-bound and revocable; score or refresh cannot authorize', t => {
   const rt = resolveRuntime(temporaryRoots(t)), s = snapshotFixture(), settings = settingsFixture();
   const run = ingestRun(s, [jobFixture()], rt, { settings, brief: 'Profile evidence' });
-  const a = assessmentFixture(run); a.fit = 'Strong';
+  const a = assessmentFixture(run, rt.dataRoot);
   saveAssessments(run.runId, [a], rt);
   const check = { jobId: a.jobId, snapshotHash: a.snapshotHash, jdHash: a.jdHash };
   assert.throws(() => requireSelection(check, rt), /select/i);

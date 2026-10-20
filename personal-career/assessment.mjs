@@ -3,6 +3,13 @@ import { contentHash, writeJson, readJson, withLock } from './runtime.mjs';
 import { validateSnapshot, profileHash, effectiveClaims } from './snapshot.mjs';
 import { existsSync } from 'node:fs';
 import { boundedPath } from './runtime.mjs';
+import { postingKey } from '../url-key.mjs';
+import { parseReport, isJdPointer, writeReportSection } from './report.mjs';
+
+// Fit bands are fixed views of the upstream 1-5 global score (modes/_shared.md).
+export const FIT_BANDS = [['Strong', 4.0], ['Moderate', 3.5], ['Stretch', 0]];
+export const fitBand = score => FIT_BANDS.find(([, min]) => score >= min)[0];
+const reportKey = n => String(parseInt(n, 10)).padStart(3, '0');
 
 const pageKey = id => /^[0-9a-f-]{32,36}$/i.test(id) ? id.replaceAll('-','').toLowerCase() : id;
 function bindings(rt) { return existsSync(boundedPath(rt.stateRoot,'identity-bindings.json')) ? readJson(rt,'identity-bindings.json') : []; }
@@ -31,7 +38,13 @@ function identityKeys(job) {
   const result = [];
   if (job.pageId) result.push(`notion:${pageKey(job.pageId)}`);
   if (job.namespace && job.requisitionId) result.push(`ats:${job.namespace}:${job.requisitionId}`);
-  if (job.url || job.canonicalUrl) result.push(`url:${canonicalUrl(job.url || job.canonicalUrl)}`);
+  if (job.reportNumber) result.push(`report:${reportKey(job.reportNumber)}`);
+  // Upstream's tracker key: aggregator posting IDs and known hash routes collapse
+  // to one key, so the Notion index and merge-tracker agree on what a vacancy is.
+  const url = job.url || job.canonicalUrl;
+  // postingKey reads the raw URL: canonicalUrl drops the fragment, which would
+  // erase a `#/job/{id}` route and merge two different postings.
+  if (url) { canonicalUrl(url); result.push(`url:${postingKey(url)}`); }
   return result;
 }
 export function resolveIdentity(job, index, aliases = []) {
@@ -66,7 +79,9 @@ export function evaluateEligibility(job, settings) {
   return { status: blockers.length ? 'blocked' : unknowns.length ? 'verify' : 'eligible', blockers, unknowns };
 }
 export function validateJob(job) {
-  keys(job, ['company','title','url','canonicalUrl','pageId','namespace','requisitionId','jdText','jdHash','checkedAt','facts','id','identity','sourceNotes'], 'job');
+  keys(job, ['company','title','url','canonicalUrl','pageId','namespace','requisitionId','reportNumber','reportPath','jdText','jdHash','checkedAt','facts','id','identity','sourceNotes'], 'job');
+  if (job.reportNumber !== undefined) check(/^\d{1,4}$/.test(String(job.reportNumber)), 'job report number');
+  if (job.reportPath !== undefined) check(/^reports\/\d{3,4}-[^/]+\.md$/.test(job.reportPath), 'job report path');
   for (const k of ['company','title','url','jdText']) string(job[k], `job.${k}`);
   canonicalUrl(job.url); timestamp(job.checkedAt, 'job checked time');
   keys(job.facts, ['baseGBP','bonusGBP','sponsorship','london','ukRemoteFromLondon','workModel','attendance','travel','roleFamilies'], 'job facts');
@@ -119,11 +134,15 @@ export function ingestRun(snapshot, jobs, rt, { settings, brief, limitations = [
   });
 }
 export function validateAssessment(a, { snapshot, job, settings }) {
-  keys(a, ['version','jobId','snapshotHash','jdHash','eligibility','fit','dimensions','rationale','matches','gaps','positioning'], 'assessment');
+  keys(a, ['version','jobId','snapshotHash','jdHash','eligibility','score','confidence','fit','reportPath','dimensions','rationale','matches','gaps','positioning'], 'assessment');
   version(a); check(a.jobId === job.id, 'Assessment job mismatch');
+  check(Number.isFinite(a.score) && a.score >= 1 && a.score <= 5, 'Assessment needs the report 1-5 global score');
+  oneOf(a.confidence, ['High','Medium','Low'], 'evidence confidence');
+  string(a.reportPath, 'report path'); check(/^reports\/\d{3,4}-[^/]+\.md$/.test(a.reportPath), 'report path must be reports/NNN-*.md');
   check(a.snapshotHash === profileHash(snapshot, settings) && a.jdHash === job.jdHash, 'Assessment hash mismatch');
   check(contentHash(a.eligibility) === contentHash(evaluateEligibility(job, settings)), 'Eligibility differs from policy');
-  oneOf(a.fit, ['Strong','Moderate','Stretch'], 'fit');
+  oneOf(a.fit, FIT_BANDS.map(([b]) => b), 'fit');
+  check(a.fit === fitBand(a.score), `Fit band must be ${fitBand(a.score)} for score ${a.score}`);
   keys(a.dimensions, ['skills','seniority','compensation','sponsorship','workLifeBalance','employer','location'], 'dimensions');
   Object.values(a.dimensions).forEach(v => string(v, 'dimension'));
   string(a.rationale, 'rationale'); string(a.positioning, 'positioning');
@@ -143,13 +162,25 @@ export function saveAssessments(runId, assessments, rt) {
     const run = readJson(rt, `runs/${runId}/run.json`);
     array(assessments, 'assessments');
     check(new Set(assessments.map(a => a.jobId)).size === assessments.length, 'Duplicate assessment');
-    for (const a of assessments) {
+    check(new Set(assessments.map(a => a.reportPath)).size === assessments.length, 'Two assessments share one report');
+    const pairs = assessments.map(a => {
       const job = run.jobs.find(j => j.id === a.jobId); check(job, 'Unknown job');
       validateAssessment(a, { snapshot: run.snapshot, job, settings: run.settings });
-    }
+      // The upstream report is the primary artifact: the assessment must agree with it.
+      check(job.reportPath === a.reportPath, 'Assessment report differs from the job report (ingest the job from report-job)');
+      const report = parseReport(rt, a.reportPath);
+      check(report.score === a.score, `Assessment score ${a.score} differs from report ${report.score}/5`);
+      check(!report.confidence || report.confidence === a.confidence, 'Assessment confidence differs from report Machine Summary');
+      check(report.jdText, 'Report has no archived JD section');
+      blocked(!isJdPointer(report.jdText), 'Report points to a jds/ capture; archive the JD text verbatim in the report so evidence can be checked');
+      check(contentHash(report.jdText) === job.jdHash, 'Report archived JD differs from the ingested JD');
+      return { a, job };
+    });
+    const ranked = [...assessments].sort((x, y) => y.score - x.score);
     const shortlist = { version: 1, runId, profileHash: run.profileHash, limitations: run.limitations,
-      assessments, shortlistedIds: assessments.filter(a => a.eligibility.status !== 'blocked').slice(0, run.settings.shortlistLimit).map(a => a.jobId) };
+      assessments, shortlistedIds: ranked.filter(a => a.eligibility.status !== 'blocked').slice(0, run.settings.shortlistLimit).map(a => a.jobId) };
     writeJson(rt, `runs/${runId}/assessments.json`, shortlist, { immutable: true });
-    return shortlist;
+    const reports = pairs.map(({ a, job }) => writeReportSection(rt, a.reportPath, a, job));
+    return { ...shortlist, reports };
   });
 }

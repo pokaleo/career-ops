@@ -14,7 +14,7 @@ import { temporaryRoots, snapshotFixture, settingsFixture } from './fixtures.mjs
 test('refresh → shortlist → lost-write recovery → select → materials → prep → confirmed event → draft', t => {
   const rt=resolveRuntime(temporaryRoots(t)),snapshot=snapshotFixture(),settings=settingsFixture();
   const run=ingestRun(snapshot,[jobFixture()],rt,{settings,brief:'Verified fictional profile'});
-  saveAssessments(run.runId,[assessmentFixture(run)],rt);
+  saveAssessments(run.runId,[assessmentFixture(run,rt.dataRoot)],rt);
   const job=run.jobs[0];
   const plan=planUpdate(null,null,{operationId:'create-example',identity:job.id,kind:'assess',properties:{Company:'Example',Position:job.title},schemaHash:'schema'},{properties:['Company','Position','Stage'],section:'career-workflow'});
   journalOperation(plan,rt);
@@ -27,7 +27,7 @@ test('refresh → shortlist → lost-write recovery → select → materials →
   const refreshed=structuredClone(snapshot);refreshed.runId='run-2';refreshed.records=[{pageId:'new-page',url:job.url,properties:plan.properties}];
   const next=ingestRun(refreshed,[jobFixture()],rt,{settings,brief:'Verified fictional profile'});
   assert.equal(next.jobs[0].id,job.id,'Stable job identity survives adoption of a Notion page');
-  saveAssessments(next.runId,[assessmentFixture(next)],rt);
+  saveAssessments(next.runId,[assessmentFixture(next,rt.dataRoot)],rt);
   recordSelection({runId:next.runId,jobIds:[job.id],requestRef:'user:selected'},rt);
   const c=prepareMaterials({jobId:job.id,runId:next.runId,snapshot:refreshed,settings,currentJob:next.jobs[0],claimIds:['notice'],format:'text'},rt);
   saveMaterialPayload({version:1,jobId:c.jobId,statements:[{text:'Three months notice',claimIds:['notice'],qualifiers:{}}]},c,rt);

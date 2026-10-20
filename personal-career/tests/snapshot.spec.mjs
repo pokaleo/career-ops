@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { symlinkSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { symlinkSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveRuntime, writeJson, readJson, contentHash, withLock } from '../runtime.mjs';
@@ -13,9 +14,20 @@ test('external root is independent of CWD; private data cannot enter checkout th
   const rt = resolveRuntime({ repoRoot, dataRoot });
   assert.equal(rt.dataRoot, dataRoot);
   assert.equal(rt.stateRoot, join(dataRoot, 'data', 'personal-career'));
-  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'private') }), /outside/i);
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'private') }), /git-ignored/i);
   symlinkSync(repoRoot, join(root, 'alias'), 'dir');
-  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(root, 'alias', 'private') }), /outside/i);
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(root, 'alias', 'private') }), /git-ignored/i);
+});
+test('in-checkout data root is accepted only when git ignores it', t => {
+  const { repoRoot } = temporaryRoots(t);
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: repoRoot }).status, 0);
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') }), /git-ignored/i);
+  writeFileSync(join(repoRoot, '.gitignore'), '/career-data/\n');
+  const rt = resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') });
+  assert.equal(rt.stateRoot, join(repoRoot, 'career-data', 'data', 'personal-career'));
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: repoRoot }), /subfolder/i);
+  writeFileSync(join(repoRoot, '.gitignore'), 'cv.md\ncareer-data/data/\n');
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') }), /git-ignored/i);
 });
 test('existing upstream data-root resolver is used when no explicit root is supplied', () => {
   const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -81,13 +93,14 @@ test('material profile hash ignores retrieval metadata and application state, bu
 test('projection includes expected qualifiers, excludes unverified metrics, and requires complete sources', () => {
   const snapshot = snapshotFixture(), settings = settingsFixture();
   const projected = projectProfile(snapshot, settings);
-  assert.match(projected.cvMarkdown, /Three months notice/);
-  assert.match(projected.cvMarkdown, /expected/i);
-  assert.doesNotMatch(projected.cvMarkdown, /80%/);
+  assert.match(projected.claimsMarkdown, /Three months notice/);
+  assert.match(projected.claimsMarkdown, /expected/i);
+  assert.doesNotMatch(projected.claimsMarkdown, /80%/);
   const profile = JSON.parse(projected.profileYaml);
   assert.equal(profile.location.needs_sponsorship, true);
   assert.deepEqual(profile.location.authorized_in, []);
-  assert.match(projected.customMarkdown, /on-demand/);
+  assert.match(projected.briefMarkdown, /^## Hard DQ Criteria/m);
+  assert.doesNotMatch(projected.briefMarkdown, /\{[A-Z][^}]*\}/);
   snapshot.sources[0].completeness = 'partial';
   assert.throws(() => projectProfile(snapshot, settings), /complete/i);
 });
@@ -97,7 +110,7 @@ test('projection is accepted by the actual upstream profile schema with supporte
   assert.deepEqual(validation.findings,[]);
   assert.equal(validation.parsed.candidate.full_name,s.candidate.name);
   assert.equal(validation.parsed.candidate.title,s.candidate.headline);
-  assert.equal(validation.parsed.compensation.minimum,'£70000 annual base');
+  assert.equal(validation.parsed.compensation.minimum,'£70,000 annual base');
   assert.equal(validation.parsed.compensation.currency,'GBP');
   assert.match(validation.parsed.location.visa_status,/sponsorship required/i);
 });
@@ -105,5 +118,5 @@ test('unrelated application correction claims neither stale selections nor enter
   const before=snapshotFixture(),after=structuredClone(before),settings=settingsFixture();
   after.claims.push({...after.claims[0],id:'other-rejected',key:'application:other-page:stage',value:'Rejected',writeDisposition:'deferred'});
   assert.equal(profileHash(before,settings),profileHash(after,settings));
-  assert.doesNotMatch(projectProfile(after,settings).cvMarkdown,/Rejected/);
+  assert.doesNotMatch(projectProfile(after,settings).claimsMarkdown,/Rejected/);
 });

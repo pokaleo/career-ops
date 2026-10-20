@@ -18,9 +18,10 @@ test('CLI works from another CWD, diagnoses input, enforces selection and needs 
   assert.equal(invoke('ingest', { ...input, brief: '' }, root).status, 2);
   assert.equal(invoke('ingest', { ...input, snapshot: { ...input.snapshot, runId: '../escape' } }, root).status, 2);
   const ingested = invoke('ingest', input, root); assert.equal(ingested.status, 0, ingested.stderr);
-  const run = JSON.parse(ingested.stdout), a = assessmentFixture(run);
+  const run = JSON.parse(ingested.stdout), a = assessmentFixture(run, dataRoot);
   assert.equal(invoke('assess', { dataRoot, runId: run.runId, assessments: [a] }, root).status, 0);
-  assert.equal(invoke('assess', { dataRoot, runId: run.runId, assessments: [{ ...a, fit: 'Strong' }] }, root).status, 3);
+  assert.equal(invoke('assess', { dataRoot, runId: run.runId, assessments: [{ ...a, rationale: 'Changed result' }] }, root).status, 3);
+  assert.equal(invoke('assess', { dataRoot, runId: run.runId, assessments: [{ ...a, fit: 'Strong' }] }, root).status, 2);
   assert.equal(invoke('materials-check', { dataRoot, jobId: a.jobId, snapshotHash: a.snapshotHash, jdHash: a.jdHash }, root).status, 3);
 });
 test('private state and protected skill survive a simulated updater system-tree replacement', t => {

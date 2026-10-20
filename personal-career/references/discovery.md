@@ -1,21 +1,30 @@
 # Discovery and assessment
 
-Read `{DATA_ROOT}/config/personal-career.json` and the linked Notion current profile. Settings are editable: reconcile explicit changes with the current user request and Notion before each run. Store a fresh versioned snapshot of sources/claims and the fully paginated application index. Do not assume a newer AI synthesis makes an uncertain claim true.
+**Refresh first** ([sync](sync.md)): the Notion profile, the full paginated application index, and settings from `{DATA_ROOT}/config/personal-career.json`. Store the run snapshot (sources, claims, records, schema fingerprint). Reconcile explicit settings changes with the current request. A newer AI synthesis does not make an uncertain claim true.
 
-Require the candidate brief. Use broad searches across all configured role families; assess responsibilities and scope individually. Search official employer pages and ATS listings, optionally using upstream scanner providers. Archive the full JD with original URL, canonical URL, ATS namespace/requisition, source facts and retrieval time. Identify cached, closed and evergreen postings explicitly.
+## 1. Find postings
 
-For a pasted JD without a stable URL/ATS identity, try to locate its official posting. If identity remains unknown, give a provisional assessment in chat and preserve the supplied text in private scratch notes; do not invent a URL or force it into the run/index. Likewise, when Notion access or index completeness is missing, provisional findings stay in dated private notes with the cache date, missing sources and explicit limitations. They cannot authorize selection, materials or Notion creates. A matched old record is not proof of current evidence: refresh it before normal ingestion.
+- `node scan.mjs` (zero-token ATS scan over `portals.yml`), then targeted web search across every configured role family for employers the scan does not cover. Add a recurring miss to `portals.yml` with the upstream `discover` mode or `coverage-check.mjs`.
+- `node check-liveness.mjs <url>` for every candidate posting before evaluating it. Aggregator listings must be confirmed at the employer (AGENTS.md → Aggregator Listings); the employer URL is canonical.
+- For a pasted JD with no stable URL or ATS identity, try to find the official posting. If its identity stays unknown, give a provisional assessment in chat only, keep the text in private scratch notes, and do not invent a URL or create a record.
 
-`ingest` validates provenance, private paths and stable identity. Tracking parameters may be removed; identity-bearing query parameters and case-sensitive paths must survive. If two existing pages match, resolve the ambiguity before writing. Similar company/title alone never merges vacancies.
+## 2. Evaluate with upstream `oferta`
 
-Assess each job against documented experience, separating matches, gaps, seniority, employer evidence, compensation, location, sponsorship and work-life balance. Match evidence includes a claim ID and exact JD excerpt. Skills/ownership/metrics inferred from code or coaching remain labelled as such. Differentiate prototypes, delivery readiness, production operation and measured outcomes.
+Run `oferta` per posting under the `modes/_custom.md` Evaluation Rules. It reserves a report number, archives the JD verbatim, and writes `reports/NNN-company-date.md` plus the tracker TSV. It skips Block E, the cover letter, form answers and story-bank appends until selection.
 
-Use `evaluateEligibility` for gates:
+## 3. Add the personal assessment
 
-- Compare annual GBP **base** with the editable floor. Bonus, equity and OTE cannot establish base. Unknown salary is flagged, not estimated or treated as zero. An overlapping band needs an offer at/above the floor.
-- Retain unknown/conditional sponsorship with verification flags. An existing employer-bound visa, sponsor licence, right-to-work question or relocation assistance is not a role sponsorship commitment.
-- Assess London and UK-remote-from-London availability from the actual JD. Attendance, travel, hours and on-call are case-by-case tradeoffs, not hidden exclusion thresholds.
+1. `report-job` with `reportPath` (the report must archive the JD text verbatim, not a `jds/` pointer) returns the company, title, URL, archived JD, score and confidence parsed from the report.
+2. Build each job: that output plus `checkedAt`, ATS `namespace` / `requisitionId` when known, and `facts` — `baseGBP {min,max}` (annual base only; bonus, equity and OTE never count), `sponsorship` (`confirmed | conditional | unknown | not_available`), `london`, `ukRemoteFromLondon` (`true | false | null`), plus work model, attendance and travel notes.
+3. `ingest` (snapshot, settings, brief, jobs, coverage limitations). Identity is upstream's posting key (aggregator IDs, hash routes), then ATS namespace + requisition, then the Notion page ID and report number. Two matching Notion pages block the run; company and title alone never merge vacancies.
+4. `assess` per job: `score` and `confidence` copied from the report, `fit` = its band (Strong ≥ 4.0, Moderate 3.5–3.9, Stretch < 3.5), the `evaluateEligibility` result, seven dimensions (skills, seniority, compensation, sponsorship, workLifeBalance, employer, location), matches citing a **claim ID and an exact quote from the archived JD**, gaps with sources, and positioning. The helper refuses an assessment that disagrees with its report, then writes the `P) Personal Fit` section into the report.
 
-Save immutable assessments with `assess`. No CV/cover/answers/STAR content belongs in them. Use Strong/Moderate/Stretch fit and clear rationale rather than a made-up weighted cutoff. Show up to the configured limit, fewer if evidence is insufficient.
+Eligibility gates: base below the floor blocks; an overlapping band needs an offer at or above the floor; unknown salary or sponsorship is a verification item. An existing employer-bound visa, a sponsor licence, a right-to-work question or relocation help is not a sponsorship commitment. Attendance, travel, hours and on-call are tradeoffs judged case by case.
 
-Present role, employer link, base/unknown, sponsorship/unknown, location/workload, strongest relevant evidence, material gaps and recommendation. Include search coverage limitations and the decision needed from the user. Persist reviewed Wishlist records in the existing database via the Notion protocol. Stop at the shortlist until the user selects roles.
+Label inferred skills, ownership and metrics as inferred. Distinguish prototypes, delivery readiness, production operation and measured outcomes.
+
+## 4. Record and present
+
+- Push each assessed role to Notion as a **Wishlist** record ([Notion protocol](notion.md)): Company, Position, Fit, Score, Salary / Salary Ceiling (GBP), Sponsorship, Location, Work Model, Reference Link, plus the report in the `career-workflow` section. Then `bind-identity`, `mirror-tracker`, and `record-push` for the report.
+- Present up to `shortlistLimit` roles, fewer when evidence is thin: role, employer link, score + band, base or unknown, sponsorship or unknown, location and workload, strongest evidence, material gaps, recommendation. Include search coverage limits and the decision needed.
+- **Stop at the shortlist** until the user selects roles.

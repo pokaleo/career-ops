@@ -39,7 +39,7 @@ test('assessment writes only immutable run state and rejects draft content and i
   mkdirSync(join(rt.dataRoot, 'data'), { recursive: true });
   for (const name of ['applications.md','star-stories.json']) writeFileSync(join(rt.dataRoot, 'data', name), 'untouched');
   const run = ingestRun(snapshotFixture(), [jobFixture()], rt, { settings: settingsFixture(), brief: 'Fictional verified profile' });
-  const assessment = assessmentFixture(run);
+  const assessment = assessmentFixture(run, rt.dataRoot);
   assert.throws(() => saveAssessments(run.runId, [{ ...assessment, cv: 'unauthorized draft' }], rt), /unknown/i);
   assert.throws(() => saveAssessments(run.runId, [{ ...assessment, snapshotHash: contentHash('wrong') }], rt), /hash/i);
   const result = saveAssessments(run.runId, [assessment], rt);
