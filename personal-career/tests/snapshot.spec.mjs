@@ -26,6 +26,15 @@ test('in-checkout data root is accepted only when git ignores it', t => {
   const rt = resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') });
   assert.equal(rt.stateRoot, join(repoRoot, 'career-data', 'data', 'personal-career'));
   assert.throws(() => resolveRuntime({ repoRoot, dataRoot: repoRoot }), /subfolder/i);
+  writeFileSync(join(repoRoot, '.gitignore'), '/career-data/*\n!/career-data/reports/\n');
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') }), /git-ignored/i, 'a negated subfolder is stageable');
+  writeFileSync(join(repoRoot, '.gitignore'), '/career-data/\n');
+  mkdirSync(join(repoRoot, 'career-data'), { recursive: true });
+  writeFileSync(join(repoRoot, 'career-data', 'cv.md'), 'private');
+  assert.equal(spawnSync('git', ['add', '-f', 'career-data/cv.md'], { cwd: repoRoot }).status, 0);
+  assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') }), /git-ignored/i, 'a force-added file is refused');
+  assert.equal(spawnSync('git', ['rm', '-q', '--cached', 'career-data/cv.md'], { cwd: repoRoot }).status, 0);
+  resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') });
   writeFileSync(join(repoRoot, '.gitignore'), 'cv.md\ncareer-data/data/\n');
   assert.throws(() => resolveRuntime({ repoRoot, dataRoot: join(repoRoot, 'career-data') }), /git-ignored/i);
 });

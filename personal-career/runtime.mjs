@@ -23,12 +23,22 @@ export function gitIgnored(repoRoot, path) {
   const tracked = run(['ls-files', '--', path]);
   return tracked.status === 0 && tracked.stdout.trim() === '';
 }
+// Every user-layer location a run writes to. Probing each one catches negation
+// rules (`/career-data/*` + `!/career-data/reports/`) that a single probe misses.
+const USER_LAYER_DIRS = ['', 'config', 'modes', 'data', 'reports', 'output', 'jds', 'interview-prep', 'interview-prep/sessions', 'batch', 'batch/tracker-additions', 'documents', 'writing-samples'];
+/** The whole data root is private: no tracked file under it, nothing stageable, every managed folder ignored. */
+export function dataRootPrivate(repoRoot, dataRoot) {
+  const run = args => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', shell: false });
+  const tracked = run(['ls-files', '--', dataRoot]);
+  if (tracked.status !== 0 || tracked.stdout.trim() !== '') return false;
+  const stageable = run(['status', '--porcelain', '--untracked-files=all', '--', dataRoot]);
+  if (stageable.status !== 0 || stageable.stdout.trim() !== '') return false;
+  return USER_LAYER_DIRS.every(d => gitIgnored(repoRoot, join(dataRoot, d, '.personal-career-probe')));
+}
 /**
- * A data root inside the checkout is accepted only when git ignores the whole
- * folder. The probe is a sentinel directly under the data root: upstream's
- * unanchored user-layer rules (`cv.md`, `data/*`) would match a probe like
- * foo/cv.md while foo/reports/ or foo/output/ stay stageable. The checkout
- * root itself is refused — use a subfolder such as career-data/.
+ * A data root inside the checkout is accepted only when git can stage nothing
+ * under it (see dataRootPrivate). The checkout root itself is refused — use a
+ * subfolder such as career-data/.
  */
 export function resolveRuntime({ repoRoot = dirname(dirname(fileURLToPath(import.meta.url))), dataRoot } = {}) {
   repoRoot = canonicalPath(repoRoot);
@@ -36,7 +46,7 @@ export function resolveRuntime({ repoRoot = dirname(dirname(fileURLToPath(import
   const stateRoot = canonicalPath(join(dataRoot, 'data', 'personal-career'));
   check(inside(dataRoot, stateRoot), 'Invalid state path');
   if (inside(repoRoot, dataRoot)) {
-    check(dataRoot !== repoRoot && gitIgnored(repoRoot, join(dataRoot, '.personal-career-probe')),
+    check(dataRoot !== repoRoot && dataRootPrivate(repoRoot, dataRoot),
       'Data root inside the checkout must be a git-ignored subfolder (add it to .gitignore)');
   }
   return { repoRoot, dataRoot, stateRoot };
