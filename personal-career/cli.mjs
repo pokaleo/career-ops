@@ -4,6 +4,7 @@ import { resolveRuntime } from './runtime.mjs';
 import { check } from './contracts.mjs';
 import { ingestRun, saveAssessments } from './assessment.mjs';
 import { recordSelection, revokeSelection, requireSelection } from './selection.mjs';
+import { planUpdate, journalOperation, reconcileOperation } from './notion-plan.mjs';
 
 try {
   const [command, file = '-'] = process.argv.slice(2);
@@ -16,6 +17,9 @@ try {
     case 'select': result = recordSelection(input, rt); break;
     case 'revoke': result = revokeSelection(input, rt); break;
     case 'materials-check': result = requireSelection(input, rt); break;
+    case 'plan-notion': result = planUpdate(input.base, input.current, input.intent, input.ownership); break;
+    case 'journal': result = journalOperation(input.plan, rt); break;
+    case 'reconcile': result = reconcileOperation(input.plan, input.receipt, input.observations); break;
     default: check(false, `Unknown command: ${command}`);
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
