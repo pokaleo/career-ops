@@ -7,6 +7,7 @@ import { recordSelection, revokeSelection, requireSelection } from './selection.
 import { planUpdate, journalOperation, reconcileOperation } from './notion-plan.mjs';
 import { projectProfile } from './snapshot.mjs';
 import { prepareMaterials, saveMaterialPayload, renderMaterials, verifyArtifacts } from './materials.mjs';
+import { buildSupportContext, validateEvent, draftActions } from './support.mjs';
 
 try {
   const [command, file = '-'] = process.argv.slice(2);
@@ -27,6 +28,9 @@ try {
     case 'materials-payload': result = saveMaterialPayload(input.payload, input.context, rt); break;
     case 'materials-render': result = renderMaterials(input.context, input.paths, rt); break;
     case 'materials-verify': result = verifyArtifacts(input.context, input.paths, rt); break;
+    case 'support': result = buildSupportContext(input); break;
+    case 'event-check': result = validateEvent(input.event, input.context); break;
+    case 'actions': result = draftActions(input.context); break;
     default: check(false, `Unknown command: ${command}`);
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

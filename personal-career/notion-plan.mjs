@@ -1,5 +1,6 @@
 import { check, blocked, keys, oneOf, string, safeId } from './contracts.mjs';
 import { contentHash, writeJson, withLock } from './runtime.mjs';
+import { validateEvent, eventStages } from './support.mjs';
 
 const equal = (a, b) => contentHash(a ?? null) === contentHash(b ?? null);
 // Notion readback escapes literal colons in plain Markdown identifiers.
@@ -20,8 +21,10 @@ export function planUpdate(base, current, intent, ownership) {
   const properties = {}, expected = {}, sections = {}, expectedSections = {}, conflicts = [];
   if (!create && base.schemaHash !== current.schemaHash) conflicts.push('schema');
   const desired = { ...(intent.properties ?? {}) };
+  if (intent.kind === 'event') validateEvent(intent.confirmedEvent, { applicationId: current?.pageId });
   if (create) desired.Stage = 'Wishlist';
   else if (intent.kind === 'select' && current.properties.Stage === 'Wishlist') desired.Stage = 'Preparing';
+  else if (intent.kind === 'event' && desired.Stage !== undefined) check(eventStages[intent.confirmedEvent.kind] === desired.Stage, 'Event does not authorize that stage');
   else delete desired.Stage;
   for (const [key, value] of Object.entries(desired)) {
     if (value === undefined) continue;

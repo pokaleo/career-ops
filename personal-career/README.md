@@ -31,6 +31,13 @@ Run `node /absolute/checkout/personal-career/cli.mjs COMMAND input.json` from an
 | `plan-notion` | `base`, `current`, `intent`, `ownership` |
 | `journal` | `plan` |
 | `reconcile` | `plan`, `receipt`, `observations` |
+| `materials-prepare` | `jobId`, `runId`, current `snapshot`, `settings`, `currentJob`, `claimIds`, `format` |
+| `materials-payload` | `context`, source-backed `payload` |
+| `materials-render` | `context`, `paths: {source, pdf}` relative to the private data root |
+| `materials-verify` | `context`, `paths: {source, pdf?, review: {semanticRef, visualRef?}}` |
+| `support` | `applicationId`, `snapshot`, `requestKind` |
+| `event-check` | `event`, `context` |
+| `actions` | `context` |
 
 Executable fictional examples live in `tests/fixtures.mjs` and `tests/*.test.mjs`. Source validators are the contract. Each run uses a new simple `runId`, saves full JDs and immutable input/assessment JSON under `data/personal-career/runs/`, and uses explicit supersession IDs for corrected facts. Refresh timestamps do not change profile hashes. Journal and selection locks serialize local writers; an interrupted lock must be investigated before removal.
 
