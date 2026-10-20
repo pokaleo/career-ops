@@ -7,6 +7,8 @@ This fork of [santifer/career-ops](https://github.com/santifer/career-ops) adds 
 - **Combined fit.** The upstream 1–5 score, plus a Strong / Moderate / Stretch band, UK eligibility gates (GBP annual base, visa sponsorship, London / UK-remote), and match evidence that cites claim IDs.
 - **Combined identity.** Upstream's posting key (aggregator IDs, hash routes), the ATS requisition, the Notion page and the report number.
 
+**New here? Start with [QUICKSTART.md](QUICKSTART.md).**
+
 The root `README.md`, `AGENTS.md` and `modes/` are upstream's and are replaced on every update. Fork documentation lives here.
 
 ## Layout
