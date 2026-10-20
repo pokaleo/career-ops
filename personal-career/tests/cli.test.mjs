@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { temporaryRoots, snapshotFixture, settingsFixture } from './fixtures.mjs';
-import { jobFixture, assessmentFixture } from './assessment.test.mjs';
+import { jobFixture, assessmentFixture } from './job-fixtures.mjs';
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'cli.mjs');
 function invoke(command, data, cwd) {
   return spawnSync(process.execPath, [cli, command, '-'], { cwd, input: typeof data === 'string' ? data : JSON.stringify(data), encoding: 'utf8' });

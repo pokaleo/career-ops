@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { resolveRuntime } from '../runtime.mjs';
+import { ingestRun, saveAssessments, bindIdentity } from '../assessment.mjs';
+import { planUpdate, journalOperation, reconcileOperation } from '../notion-plan.mjs';
+import { recordSelection } from '../selection.mjs';
+import { prepareMaterials, saveMaterialPayload, verifyArtifacts } from '../materials.mjs';
+import { buildSupportContext, validateEvent, draftActions } from '../support.mjs';
+import { jobFixture, assessmentFixture } from './job-fixtures.mjs';
+import { temporaryRoots, snapshotFixture, settingsFixture } from './fixtures.mjs';
+
+test('refresh → shortlist → lost-write recovery → select → materials → prep → confirmed event → draft', t => {
+  const rt=resolveRuntime(temporaryRoots(t)),snapshot=snapshotFixture(),settings=settingsFixture();
+  const run=ingestRun(snapshot,[jobFixture()],rt,{settings,brief:'Verified fictional profile'});
+  saveAssessments(run.runId,[assessmentFixture(run)],rt);
+  const job=run.jobs[0];
+  const plan=planUpdate(null,null,{operationId:'create-example',identity:job.id,kind:'assess',properties:{Company:'Example',Position:job.title},schemaHash:'schema'},{properties:['Company','Position','Stage'],section:'career-workflow'});
+  journalOperation(plan,rt);
+  assert.equal(reconcileOperation(plan,null,[]).state,'pending_reconciliation');
+  const observation={pageId:'new-page',operationId:plan.operationId,properties:plan.properties,sections:plan.sections};
+  const recovered=reconcileOperation(plan,null,[observation]);
+  assert.equal(recovered.state,'verified');
+  bindIdentity(job,recovered,rt);
+  journalOperation(plan,rt); // Idempotent interrupted-run retry, without another external create.
+  const refreshed=structuredClone(snapshot);refreshed.runId='run-2';refreshed.records=[{pageId:'new-page',url:job.url,properties:plan.properties}];
+  const next=ingestRun(refreshed,[jobFixture()],rt,{settings,brief:'Verified fictional profile'});
+  assert.equal(next.jobs[0].id,job.id,'Stable job identity survives adoption of a Notion page');
+  saveAssessments(next.runId,[assessmentFixture(next)],rt);
+  recordSelection({runId:next.runId,jobIds:[job.id],requestRef:'user:selected'},rt);
+  const c=prepareMaterials({jobId:job.id,runId:next.runId,snapshot:refreshed,settings,currentJob:next.jobs[0],claimIds:['notice'],format:'text'},rt);
+  saveMaterialPayload({version:1,jobId:c.jobId,statements:[{text:'Three months notice',claimIds:['notice'],qualifiers:{}}]},c,rt);
+  mkdirSync(join(rt.dataRoot,'output'));writeFileSync(join(rt.dataRoot,'output','cv.md'),'Three months notice');
+  assert.equal(verifyArtifacts(c,{source:'output/cv.md',review:{semanticRef:'review:source-against-claims'}},rt).verified,true);
+  refreshed.records[0].properties.Stage='Technical Interview';
+  refreshed.records[0].submittedCV={id:'cv-version',confirmedBy:'user:submitted'};
+  const support=buildSupportContext({applicationId:'new-page',snapshot:refreshed,requestKind:'interview'});
+  assert.equal(support.submittedCV.id,'cv-version');
+  const event=validateEvent({version:1,applicationId:'new-page',kind:'interview_completed',state:'confirmed',requestRef:'user:completed',actualDate:null},support);
+  assert.equal(event.actualDate,null);
+  assert.equal(draftActions({...support,requestKind:'followup'})[0].state,'draft');
+});

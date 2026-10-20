@@ -6,7 +6,7 @@ import { resolveRuntime } from '../runtime.mjs';
 import { ingestRun, saveAssessments } from '../assessment.mjs';
 import { profileHash } from '../snapshot.mjs';
 import { recordSelection, requireSelection, revokeSelection } from '../selection.mjs';
-import { jobFixture, assessmentFixture } from './assessment.test.mjs';
+import { jobFixture, assessmentFixture } from './job-fixtures.mjs';
 import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs';
 
 test('selection is explicit, hash-bound and revocable; score or refresh cannot authorize', t => {

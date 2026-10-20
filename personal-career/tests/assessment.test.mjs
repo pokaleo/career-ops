@@ -6,21 +6,8 @@ import { resolveRuntime, contentHash } from '../runtime.mjs';
 import { canonicalUrl, resolveIdentity, evaluateEligibility, ingestRun, saveAssessments } from '../assessment.mjs';
 import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs';
 
-export function jobFixture(overrides = {}) {
-  return { company: 'Example Ltd', title: 'AI Engineer', url: 'https://example.invalid/jobs?id=123&utm_source=mail',
-    namespace: 'example-ats', requisitionId: '123', jdText: 'Build production software.',
-    checkedAt: '2026-10-20T12:00:00Z', facts: { baseGBP: { min: 75000, max: 100000 },
-      sponsorship: 'confirmed', london: true, ukRemoteFromLondon: false, workModel: 'hybrid' }, ...overrides };
-}
-export function assessmentFixture(run, job = run.jobs[0]) {
-  return { version: 1, jobId: job.id, snapshotHash: run.profileHash, jdHash: job.jdHash,
-    eligibility: evaluateEligibility(job, run.settings), fit: 'Moderate',
-    dimensions: { skills: 'Relevant document workflow experience', seniority: 'Verify ownership depth' },
-    rationale: 'Potential fit, pending employer screening.',
-    matches: [{ claimId: 'notice', jdEvidence: 'Build production software.', explanation: 'Synthetic fixture only.' }],
-    gaps: [{ detail: 'Team expectations unknown', sourceUrl: job.url }],
-    positioning: 'Focus on demonstrated engineering delivery' };
-}
+import { jobFixture, assessmentFixture } from './job-fixtures.mjs';
+
 test('identity preserves job identifiers and path case, removes tracking, and never matches by title', () => {
   assert.equal(canonicalUrl('https://example.invalid/Jobs?id=1&utm_source=x#top'), 'https://example.invalid/Jobs?id=1');
   assert.notEqual(canonicalUrl('https://example.invalid/jobs?id=1'), canonicalUrl('https://example.invalid/jobs?id=2'));

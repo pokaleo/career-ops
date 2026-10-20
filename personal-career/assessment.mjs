@@ -1,6 +1,23 @@
 import { check, blocked, keys, string, array, oneOf, timestamp, safeId, version, validateSettings } from './contracts.mjs';
 import { contentHash, writeJson, readJson, withLock } from './runtime.mjs';
 import { validateSnapshot, profileHash, effectiveClaims } from './snapshot.mjs';
+import { existsSync } from 'node:fs';
+import { boundedPath } from './runtime.mjs';
+
+const pageKey = id => /^[0-9a-f-]{32,36}$/i.test(id) ? id.replaceAll('-','').toLowerCase() : id;
+function bindings(rt) { return existsSync(boundedPath(rt.stateRoot,'identity-bindings.json')) ? readJson(rt,'identity-bindings.json') : []; }
+export function bindIdentity(job, verification, rt) {
+  validateJob(job); safeId(job.id);
+  blocked(verification.state === 'verified' && verification.pageId, 'Identity adoption requires verified Notion readback');
+  return withLock(rt,'identity-bindings',()=>{
+    const all=bindings(rt), pageId=pageKey(verification.pageId);
+    const prior=all.find(b=>b.jobId===job.id || b.pageId===pageId);
+    blocked(!prior || (prior.jobId===job.id && prior.pageId===pageId), 'Conflicting identity binding');
+    const binding={jobId:job.id,pageId,url:job.url,...(job.namespace?{namespace:job.namespace}:{}),...(job.requisitionId?{requisitionId:job.requisitionId}:{})};
+    if(!prior) all.push(binding);
+    writeJson(rt,'identity-bindings.json',all);return binding;
+  });
+}
 
 export function canonicalUrl(value) {
   let u; try { u = new URL(value); } catch { check(false, 'Invalid job URL'); }
@@ -12,7 +29,7 @@ export function canonicalUrl(value) {
 }
 function identityKeys(job) {
   const result = [];
-  if (job.pageId) result.push(`notion:${job.pageId}`);
+  if (job.pageId) result.push(`notion:${pageKey(job.pageId)}`);
   if (job.namespace && job.requisitionId) result.push(`ats:${job.namespace}:${job.requisitionId}`);
   if (job.url || job.canonicalUrl) result.push(`url:${canonicalUrl(job.url || job.canonicalUrl)}`);
   return result;
@@ -21,9 +38,13 @@ export function resolveIdentity(job, index) {
   const candidates = identityKeys(job);
   if (!candidates.length) return { kind: 'insufficient', reason: 'No stable identity' };
   const matches = (index.records ?? []).filter(r => identityKeys(r).some(k => candidates.includes(k)));
-  const ids = [...new Set(matches.map(r => r.pageId).filter(Boolean))];
+  const ids = [...new Set(matches.map(r => r.pageId ? pageKey(r.pageId) : null).filter(Boolean))];
   if (ids.length > 1) return { kind: 'ambiguous', pageIds: ids };
-  if (ids.length === 1) return { kind: 'matched', pageId: ids[0], id: `job-${contentHash(`notion:${ids[0]}`).slice(0,24)}` };
+  if (ids.length === 1) {
+    const boundIds=[...new Set(matches.map(r=>r.jobId).filter(Boolean))];
+    if(boundIds.length>1) return {kind:'ambiguous',pageIds:ids,reason:'Conflicting persistent job IDs'};
+    return { kind: 'matched', pageId: ids[0], id: boundIds[0] ? safeId(boundIds[0]) : `job-${contentHash(`notion:${ids[0]}`).slice(0,24)}` };
+  }
   if (!index.complete) return { kind: 'insufficient', reason: 'Identity index incomplete' };
   return { kind: 'create', identityKey: candidates[0], id: `job-${contentHash(candidates[0]).slice(0,24)}` };
 }
@@ -64,7 +85,11 @@ export function ingestRun(snapshot, jobs, rt, { settings, brief, limitations = [
   validateSnapshot(snapshot); validateSettings(settings); string(brief, 'Required profile brief');
   blocked(snapshot.sources.every(s => s.completeness === 'complete'), 'Assessment requires complete profile sources');
   safeId(snapshot.runId); array(jobs, 'jobs'); array(limitations, 'coverage limitations');
-  const index = { complete: snapshot.identityIndexComplete, records: snapshot.records };
+  const allBindings=bindings(rt);
+  const index = { complete: snapshot.identityIndexComplete, records: snapshot.records.map(r=>{
+    const binding=allBindings.find(b=>b.pageId===pageKey(r.pageId));
+    return binding?{...binding,...r,jobId:binding.jobId}:r;
+  }) };
   const normalized = jobs.map(j => {
     validateJob(j);
     const identity = resolveIdentity(j, index);

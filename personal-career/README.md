@@ -25,6 +25,7 @@ Run `node /absolute/checkout/personal-career/cli.mjs COMMAND input.json` from an
 | `profile` | `snapshot`, `settings` |
 | `ingest` | `snapshot`, `settings`, `brief`, `jobs`, optional `limitations` |
 | `assess` | `runId`, `assessments` |
+| `bind-identity` | `job`, verified reconciliation result as `verification` |
 | `select` | `runId`, `jobIds`, `requestRef` |
 | `revoke` | `jobIds`, `requestRef` |
 | `materials-check` | `jobId`, current `snapshotHash`, current `jdHash` |

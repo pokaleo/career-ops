@@ -6,7 +6,7 @@ import { prepareMaterials, validateMaterialPayload, saveMaterialPayload, renderM
 import { ingestRun, saveAssessments } from '../assessment.mjs';
 import { recordSelection } from '../selection.mjs';
 import { resolveRuntime } from '../runtime.mjs';
-import { jobFixture, assessmentFixture } from './assessment.test.mjs';
+import { jobFixture, assessmentFixture } from './job-fixtures.mjs';
 import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs';
 export function materialFixture(t, format = 'text') {
   const rt = resolveRuntime(temporaryRoots(t)), snapshot = snapshotFixture(), settings = settingsFixture();
