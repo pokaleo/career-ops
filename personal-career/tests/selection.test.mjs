@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { resolveRuntime } from '../runtime.mjs';
+import { ingestRun, saveAssessments } from '../assessment.mjs';
+import { profileHash } from '../snapshot.mjs';
+import { recordSelection, requireSelection, revokeSelection } from '../selection.mjs';
+import { jobFixture, assessmentFixture } from './assessment.test.mjs';
+import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs';
+
+test('selection is explicit, hash-bound and revocable; score or refresh cannot authorize', t => {
+  const rt = resolveRuntime(temporaryRoots(t)), s = snapshotFixture(), settings = settingsFixture();
+  const run = ingestRun(s, [jobFixture()], rt, { settings, brief: 'Profile evidence' });
+  const a = assessmentFixture(run); a.fit = 'Strong';
+  saveAssessments(run.runId, [a], rt);
+  const check = { jobId: a.jobId, snapshotHash: a.snapshotHash, jdHash: a.jdHash };
+  assert.throws(() => requireSelection(check, rt), /select/i);
+  assert.equal(existsSync(join(rt.dataRoot, 'output')), false);
+  assert.throws(() => recordSelection({ runId: run.runId, jobIds: ['missing'], requestRef: 'user:1' }, rt), /unknown/i);
+  assert.throws(() => recordSelection({ runId: run.runId, jobIds: [a.jobId], requestRef: '' }, rt), /request/i);
+  const selected = recordSelection({ runId: run.runId, jobIds: [a.jobId], requestRef: 'user:1' }, rt);
+  assert.equal(requireSelection(check, rt).id, selected.id);
+  assert.throws(() => requireSelection({ ...check, jdHash: 'changed' }, rt), /stale/i);
+  assert.throws(() => requireSelection({ ...check, snapshotHash: 'changed' }, rt), /stale/i);
+  s.retrievedAt = '2026-10-21T12:00:00Z'; s.sources[0].retrievedAt = s.retrievedAt;
+  assert.equal(requireSelection({ ...check, snapshotHash: profileHash(s, settings) }, rt).id, selected.id);
+  revokeSelection({ jobIds: [a.jobId], requestRef: 'user:2' }, rt);
+  assert.throws(() => requireSelection(check, rt), /revoked/i);
+});

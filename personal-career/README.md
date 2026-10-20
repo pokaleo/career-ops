@@ -5,3 +5,5 @@ An on-demand assistant workflow with local validation helpers. The existing Noti
 The protected source is `personal-career/SKILL.md`. This directory is registered as local content so upstream updates preserve it. The original upstream entry points are not restricted by this extension.
 
 Run extension tests with `node --test personal-career/tests/*.test.mjs`.
+
+Selection records require an explicit user request reference. The assistant records that reference from the conversation; the helper cannot authenticate its meaning. A strong fit does not authorize tailoring. Material generation checks the selection against current profile and JD hashes; a material change requires reassessment and renewed selection.
