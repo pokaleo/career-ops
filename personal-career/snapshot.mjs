@@ -43,11 +43,14 @@ export function effectiveClaims(s) {
   return s.claims.filter(c => !superseded.has(c.id));
 }
 export function permittedClaims(s) {
-  return effectiveClaims(s).filter(c => c.status === 'confirmed' && c.evidenceKind !== 'coaching');
+  return candidateClaims(s).filter(c => c.status === 'confirmed' && c.evidenceKind !== 'coaching');
+}
+export function candidateClaims(s) {
+  return effectiveClaims(s).filter(c => !c.key.startsWith('application:'));
 }
 export function profileHash(s, settings) {
   validateSettings(settings);
-  const claims = effectiveClaims(s).sort((a,b) => a.id.localeCompare(b.id));
+  const claims = candidateClaims(s).sort((a,b) => a.id.localeCompare(b.id));
   const ids = new Set(claims.map(c => c.sourceId));
   const sources = s.sources.filter(x => ids.has(x.id)).map(({ id, contentHash, completeness }) => ({ id, contentHash, completeness })).sort((a,b) => a.id.localeCompare(b.id));
   return contentHash({ claims, sources, settings });
@@ -61,9 +64,12 @@ export function projectProfile(s, settings) {
   return {
     cvMarkdown: profileMarkdown, profileMarkdown,
     profileYaml: JSON.stringify({
-      name: settings.candidate.name, title: settings.candidate.headline,
-      location: { needs_sponsorship: settings.sponsorship.required, authorized_in: settings.sponsorship.unrestrictedCountries },
-      salary: { minimum: settings.compensation.minimumBaseGBP, currency: 'GBP' },
+      candidate: { full_name: settings.candidate.name, title: settings.candidate.headline },
+      location: { needs_sponsorship: settings.sponsorship.required, authorized_in: settings.sponsorship.unrestrictedCountries,
+        visa_status: settings.sponsorship.required ? `Sponsorship required for a new employer; planning need ${settings.sponsorship.months} months. Existing permission does not establish unrestricted new-employer rights.` : 'Sponsorship not required according to current candidate settings.' },
+      compensation: { minimum: `£${settings.compensation.minimumBaseGBP} annual base`, currency: 'GBP',
+        target_range: `£${settings.compensation.targetBaseGBP.join('–£')} annual base; higher welcome; bonus and equity separate` },
+      target_roles: { primary: settings.roleFamilies },
     }, null, 2),
     briefMarkdown: `${profileMarkdown}\nMinimum annual GBP base: ${settings.compensation.minimumBaseGBP}. Role families: ${settings.roleFamilies.join(', ')}.\n`,
     customMarkdown: '# Personal workflow\n\nRun on-demand only. Present shortlist first; tailor only explicitly selected roles. User submits. Unknown salary/sponsorship require verification. London or UK remote from London; hybrid preferred. Assess attendance, hours, on-call and travel case by case. Never treat an expected promotion as attained.\n',

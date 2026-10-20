@@ -35,6 +35,8 @@ try {
     default: check(false, `Unknown command: ${command}`);
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (result.conflicts?.length || (command === 'reconcile' && !['verified','no_op'].includes(result.state))
+    || (command === 'materials-verify' && !result.verified)) process.exitCode = 3;
 } catch (error) {
   process.stderr.write(`${error.message}\n`);
   process.exitCode = error.code === 3 ? 3 : 2;

@@ -34,8 +34,8 @@ function identityKeys(job) {
   if (job.url || job.canonicalUrl) result.push(`url:${canonicalUrl(job.url || job.canonicalUrl)}`);
   return result;
 }
-export function resolveIdentity(job, index) {
-  const candidates = identityKeys(job);
+export function resolveIdentity(job, index, aliases = []) {
+  const candidates = [...new Set([...identityKeys(job), ...aliases])];
   if (!candidates.length) return { kind: 'insufficient', reason: 'No stable identity' };
   const matches = (index.records ?? []).filter(r => identityKeys(r).some(k => candidates.includes(k)));
   const ids = [...new Set(matches.map(r => r.pageId ? pageKey(r.pageId) : null).filter(Boolean))];
@@ -90,9 +90,24 @@ export function ingestRun(snapshot, jobs, rt, { settings, brief, limitations = [
     const binding=allBindings.find(b=>b.pageId===pageKey(r.pageId));
     return binding?{...binding,...r,jobId:binding.jobId}:r;
   }) };
-  const normalized = jobs.map(j => {
-    validateJob(j);
-    const identity = resolveIdentity(j, index);
+  const groups=[];
+  for(const job of jobs) {
+    validateJob(job);
+    const jobKeys=new Set(identityKeys(job));
+    const matching=groups.filter(g=>g.keys.some(k=>jobKeys.has(k)));
+    for(const group of matching) {
+      blocked(contentHash(group.job.jdText)===contentHash(job.jdText) && contentHash(group.job.facts)===contentHash(job.facts), 'Conflicting representations of the same vacancy; choose current evidence');
+      group.keys.forEach(k=>jobKeys.add(k));
+    }
+    const candidates=[job,...matching.map(g=>g.job)];
+    const rank=j=>(j.pageId?4:0)+(j.namespace&&j.requisitionId?2:0);
+    candidates.sort((a,b)=>rank(b)-rank(a));
+    const merged=candidates[0];
+    for(const group of matching) groups.splice(groups.indexOf(group),1);
+    groups.push({job:merged,keys:[...jobKeys]});
+  }
+  const normalized = groups.map(({job:j,keys:aliases}) => {
+    const identity = resolveIdentity(j, index, aliases);
     blocked(['matched','create'].includes(identity.kind), `Vacancy identity ${identity.kind}`);
     return { ...j, id: identity.id, identity, canonicalUrl: canonicalUrl(j.url), jdHash: contentHash(j.jdText) };
   });

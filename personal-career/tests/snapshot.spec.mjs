@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveRuntime, writeJson, readJson, contentHash, withLock } from '../runtime.mjs';
 import { validateSnapshot, effectiveClaims, profileHash, projectProfile } from '../snapshot.mjs';
 import { snapshotFixture, settingsFixture, temporaryRoots } from './fixtures.mjs';
+import { validateProfile, EXAMPLE_PATH } from '../../validate-profile.mjs';
 
 test('external root is independent of CWD; private data cannot enter checkout through symlinks', t => {
   const { repoRoot, dataRoot, root } = temporaryRoots(t);
@@ -89,4 +90,20 @@ test('projection includes expected qualifiers, excludes unverified metrics, and 
   assert.match(projected.customMarkdown, /on-demand/);
   snapshot.sources[0].completeness = 'partial';
   assert.throws(() => projectProfile(snapshot, settings), /complete/i);
+});
+test('projection is accepted by the actual upstream profile schema with supported identity and compensation', () => {
+  const s=settingsFixture(),p=projectProfile(snapshotFixture(),s);
+  const validation=validateProfile(p.profileYaml,readFileSync(EXAMPLE_PATH,'utf8'));
+  assert.deepEqual(validation.findings,[]);
+  assert.equal(validation.parsed.candidate.full_name,s.candidate.name);
+  assert.equal(validation.parsed.candidate.title,s.candidate.headline);
+  assert.equal(validation.parsed.compensation.minimum,'£70000 annual base');
+  assert.equal(validation.parsed.compensation.currency,'GBP');
+  assert.match(validation.parsed.location.visa_status,/sponsorship required/i);
+});
+test('unrelated application correction claims neither stale selections nor enter CV projections', () => {
+  const before=snapshotFixture(),after=structuredClone(before),settings=settingsFixture();
+  after.claims.push({...after.claims[0],id:'other-rejected',key:'application:other-page:stage',value:'Rejected',writeDisposition:'deferred'});
+  assert.equal(profileHash(before,settings),profileHash(after,settings));
+  assert.doesNotMatch(projectProfile(after,settings).cvMarkdown,/Rejected/);
 });

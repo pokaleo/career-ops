@@ -48,3 +48,15 @@ test('renderer uses argument arrays, private paths and records failure; verifica
   assert.equal(verifyArtifacts(c,paths,rt).verified,false);
   assert.throws(()=>verifyArtifacts(c,{...paths,pdf:'../outside.pdf'},rt),/path/i);
 });
+test('one selection supports immutable editorial revisions and multiple output formats', t => {
+  const {rt,run,input}=materialFixture(t);
+  const selection=recordSelection({runId:run.runId,jobIds:[input.jobId],requestRef:'user:select'},rt);
+  const first=prepareMaterials(input,rt);
+  saveMaterialPayload({version:1,jobId:first.jobId,statements:[{text:'Manager promotion expected next year',claimIds:['promotion'],qualifiers:{promotion:'expected'}}]},first,rt);
+  const second=prepareMaterials(input,rt);
+  assert.notEqual(first.attemptId,second.attemptId);
+  saveMaterialPayload({version:1,jobId:second.jobId,statements:[{text:'Expected manager promotion next year',claimIds:['promotion'],qualifiers:{promotion:'expected'}}]},second,rt);
+  const latex=prepareMaterials({...input,format:'latex'},rt);
+  assert.equal(latex.selectionId,selection.id);
+  assert.equal(latex.format,'latex');
+});

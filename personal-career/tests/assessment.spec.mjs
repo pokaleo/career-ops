@@ -49,3 +49,11 @@ test('assessment writes only immutable run state and rejects draft content and i
   assert.equal(existsSync(join(rt.dataRoot, 'output')), false);
   assert.throws(() => ingestRun(snapshotFixture(), [jobFixture()], rt, { settings: settingsFixture(), brief: '' }), /brief/i);
 });
+test('mixed ATS and URL representations of the same incoming vacancy deduplicate', t => {
+  const rt=resolveRuntime(temporaryRoots(t)),rich=jobFixture(),urlOnly=jobFixture({namespace:undefined,requisitionId:undefined});
+  delete urlOnly.namespace;delete urlOnly.requisitionId;
+  const run=ingestRun(snapshotFixture(),[urlOnly,rich],rt,{settings:settingsFixture(),brief:'profile'});
+  assert.equal(run.jobs.length,1);assert.equal(run.jobs[0].requisitionId,'123');
+  const s=snapshotFixture();s.runId='conflicting-copy';
+  assert.throws(()=>ingestRun(s,[rich,{...urlOnly,jdText:'Changed requirements'}],rt,{settings:settingsFixture(),brief:'profile'}),/conflict/i);
+});

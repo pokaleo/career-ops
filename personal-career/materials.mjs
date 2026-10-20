@@ -1,20 +1,22 @@
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { getProfilePath } from '../path-resolver.mjs';
 import { check, blocked, keys, array, string, oneOf, version, safeId } from './contracts.mjs';
 import { contentHash, readJson, writeJson, boundedPath } from './runtime.mjs';
 import { permittedClaims, profileHash, validateSnapshot } from './snapshot.mjs';
 import { validateJob } from './assessment.mjs';
 import { requireSelection } from './selection.mjs';
 
-function prefix(c) { return `materials/${safeId(c.jobId)}/${safeId(c.selectionId)}`; }
+function prefix(c) { return `materials/${safeId(c.jobId)}/${safeId(c.selectionId)}/${safeId(c.attemptId)}`; }
 function currentContext(c, rt) {
   const saved = readJson(rt, `${prefix(c)}/context.json`);
   blocked(contentHash(saved) === contentHash(c), 'Material context differs from authorized context');
   requireSelection({jobId:c.jobId,snapshotHash:c.profileHash,jdHash:c.jdHash},rt);
   return saved;
 }
-export function prepareMaterials({jobId,runId,snapshot,settings,currentJob,claimIds,format}, rt) {
+export function prepareMaterials({jobId,runId,snapshot,settings,currentJob,claimIds,format,attemptId=randomUUID()}, rt) {
   safeId(jobId); safeId(runId); validateSnapshot(snapshot); validateJob(currentJob);
   check(currentJob.id === jobId, 'Material job mismatch'); oneOf(format,['text','html','latex'],'material format');
   const hash = profileHash(snapshot,settings), jdHash = contentHash(currentJob.jdText);
@@ -24,7 +26,7 @@ export function prepareMaterials({jobId,runId,snapshot,settings,currentJob,claim
   const permitted=permittedClaims(snapshot), claims=claimIds.map(id=>{
     const c=permitted.find(c=>c.id===id);check(c,'Unknown or unconfirmed material claim');return c;
   });
-  const context={version:1,jobId,runId,selectionId:selection.id,profileHash:hash,jdHash,format,claims};
+  const context={version:1,jobId,runId,selectionId:selection.id,attemptId:safeId(attemptId),profileHash:hash,jdHash,format,claims};
   writeJson(rt,`${prefix(context)}/context.json`,context,{immutable:true});
   return context;
 }
@@ -59,9 +61,9 @@ export function renderMaterials(c,paths,rt,runner=spawnSync) {
   const script=join(rt.repoRoot,c.format==='latex'?'generate-latex.mjs':'generate-pdf.mjs');
   const args=[script,source,pdf,...(c.format==='latex'?['--compile-only']:['--format=a4','--kind=cv'])];
   const result=runner(process.execPath,args,{cwd:rt.repoRoot,encoding:'utf8',shell:false,timeout:120000,
-    env:{...process.env,CAREER_OPS_ROOT:rt.dataRoot,CAREER_OPS_DATA_DIR:rt.dataRoot,CAREER_OPS_PROFILE:join(rt.dataRoot,'config/profile.yml')}});
+    env:{...process.env,CAREER_OPS_ROOT:rt.dataRoot,CAREER_OPS_DATA_DIR:rt.dataRoot,CAREER_OPS_PROFILE:getProfilePath(rt.dataRoot)}});
   const record={status:result.status??null,error:result.error?.message??null,source:paths.source,pdf:paths.pdf,sourceHash:contentHash(readFileSync(source,'utf8')),
-    pdfHash:result.status===0 && existsSync(pdf)?contentHash(readFileSync(pdf).toString('base64')):null,stderr:result.stderr??''};
+    pdfHash:result.status===0 && existsSync(pdf)?contentHash(readFileSync(pdf).toString('base64')):null,stderr:result.stderr??'',stdout:result.stdout??''};
   writeJson(rt,`${prefix(c)}/render.json`,record);
   blocked(result.status===0 && record.pdfHash,'Material render failed; see private render record');
   return record;
@@ -88,7 +90,7 @@ export function verifyArtifacts(c,paths,rt) {
   const payloadPath=`${prefix(c)}/payload.json`;
   if(!existsSync(boundedPath(rt.stateRoot,payloadPath))) findings.push('validated_payload_required');
   else validateMaterialPayload(readJson(rt,payloadPath),c);
-  const manifest={version:1,jobId:c.jobId,selectionId:c.selectionId,profileHash:c.profileHash,jdHash:c.jdHash,format:c.format,
+  const manifest={version:1,jobId:c.jobId,selectionId:c.selectionId,attemptId:c.attemptId,profileHash:c.profileHash,jdHash:c.jdHash,format:c.format,
     files,review:paths.review??null,verified:findings.length===0,findings};
   writeJson(rt,`${prefix(c)}/manifest.json`,manifest);
   return {verified:manifest.verified,findings,manifest};

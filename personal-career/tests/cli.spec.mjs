@@ -32,3 +32,10 @@ test('private state and protected skill survive a simulated updater system-tree 
   assert.equal(readFileSync(join(repoRoot, 'personal-career', 'SKILL.md'), 'utf8'), 'protected');
   assert.equal(readFileSync(join(dataRoot, 'private.json'), 'utf8'), 'private');
 });
+test('CLI conflict plans and pending reconciliation return blocked status with machine-readable details', t => {
+  const {root,dataRoot}=temporaryRoots(t);
+  const base={pageId:'page',schemaHash:'s',properties:{Fit:'Moderate'},sections:{}};
+  const response=invoke('plan-notion',{dataRoot,base,current:{...base,properties:{Fit:'Stretch'}},
+    intent:{operationId:'op',identity:'job',kind:'assess',properties:{Fit:'Strong'}},ownership:{properties:['Fit'],section:'career-workflow'}},root);
+  assert.equal(response.status,3);assert.deepEqual(JSON.parse(response.stdout).conflicts,['Fit']);
+});
