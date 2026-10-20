@@ -6,6 +6,7 @@ import { ingestRun, saveAssessments } from './assessment.mjs';
 import { recordSelection, revokeSelection, requireSelection } from './selection.mjs';
 import { planUpdate, journalOperation, reconcileOperation } from './notion-plan.mjs';
 import { projectProfile } from './snapshot.mjs';
+import { prepareMaterials, saveMaterialPayload, renderMaterials, verifyArtifacts } from './materials.mjs';
 
 try {
   const [command, file = '-'] = process.argv.slice(2);
@@ -22,6 +23,10 @@ try {
     case 'plan-notion': result = planUpdate(input.base, input.current, input.intent, input.ownership); break;
     case 'journal': result = journalOperation(input.plan, rt); break;
     case 'reconcile': result = reconcileOperation(input.plan, input.receipt, input.observations); break;
+    case 'materials-prepare': result = prepareMaterials(input, rt); break;
+    case 'materials-payload': result = saveMaterialPayload(input.payload, input.context, rt); break;
+    case 'materials-render': result = renderMaterials(input.context, input.paths, rt); break;
+    case 'materials-verify': result = verifyArtifacts(input.context, input.paths, rt); break;
     default: check(false, `Unknown command: ${command}`);
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

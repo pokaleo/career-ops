@@ -1,0 +1,13 @@
+# Selected-role materials
+
+Resolve the user's explicit selection to stable job IDs from the shortlist; do not select on praise or a high fit. Refresh Notion evidence/settings and the full employer JD. Use `select` with the conversation request reference, then `materials-prepare` with current inputs. If hashes changed, reassess and obtain selection for the updated assessment. The helper reads persisted authorization; a supplied selection object is not a substitute.
+
+Choose verified evidence and positioning for the employer. Preserve distinctions between personal implementation, shared contributions, prototypes, deployment readiness and production ownership. Confirm a reported claim before promoting it to confirmed. Keep pending promotions explicitly expected, internal title ambiguity explicit, and credential/education names accurate. Adapt emphasis; never manufacture metrics, years, model-training expertise or leadership scope.
+
+Draft source-backed statements in the payload shape from `materials.mjs`, then run `materials-payload`. This validates claim IDs, numeric tokens and expected qualifiers. Review every sentence against the underlying source; those deterministic checks do not prove semantic truth or component ownership.
+
+Reuse the candidate's current editable CV source/format when practical. Keep factual sections, dates and both current credentials intact. Write a new version to the external data root; do not overwrite the submitted version. For LaTeX, `materials-render` invokes the existing `generate-latex.mjs` in compile-only mode (fact gate still enabled); for HTML it invokes `generate-pdf.mjs` with A4 output. It uses argument arrays and requires an authorized context and validated payload. Missing engines/browsers should be reported, with the editable source retained.
+
+Review the final source against the validated statements. Extract PDF text and inspect every rendered page for clipping, overflow, typography and omitted sections. Run `materials-verify` with paths plus genuine semantic/visual review references; only a verified manifest is ready for delivery. A text-only deliverable still needs semantic review. Review references record the assistant's work; they are not independent proof.
+
+Create a new version in the existing Notion CV library using its live schema and operation journal. Read it back before adding it to the application's `CV Version` relation by set union. Include artifact paths/hashes or supported attachments, selection and evidence references in the version record. Reuse an existing matching version after an uncertain write; never blindly create twice. Preparing remains distinct from Applied; the user submits.
