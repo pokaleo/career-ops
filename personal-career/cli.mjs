@@ -5,6 +5,7 @@ import { check } from './contracts.mjs';
 import { ingestRun, saveAssessments } from './assessment.mjs';
 import { recordSelection, revokeSelection, requireSelection } from './selection.mjs';
 import { planUpdate, journalOperation, reconcileOperation } from './notion-plan.mjs';
+import { projectProfile } from './snapshot.mjs';
 
 try {
   const [command, file = '-'] = process.argv.slice(2);
@@ -12,6 +13,7 @@ try {
   const rt = resolveRuntime({ dataRoot: input.dataRoot });
   let result;
   switch (command) {
+    case 'profile': result = projectProfile(input.snapshot, input.settings); break;
     case 'ingest': result = ingestRun(input.snapshot, input.jobs, rt, input); break;
     case 'assess': result = saveAssessments(input.runId, input.assessments, rt); break;
     case 'select': result = recordSelection(input, rt); break;

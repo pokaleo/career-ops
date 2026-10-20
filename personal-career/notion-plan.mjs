@@ -2,6 +2,9 @@ import { check, blocked, keys, oneOf, string, safeId } from './contracts.mjs';
 import { contentHash, writeJson, withLock } from './runtime.mjs';
 
 const equal = (a, b) => contentHash(a ?? null) === contentHash(b ?? null);
+// Notion readback escapes literal colons in plain Markdown identifiers.
+// Keep every other character significant so actual body edits still conflict.
+const bodyEqual = (a, b) => equal(typeof a === 'string' ? a.replace(/\\:/g, ':') : a, typeof b === 'string' ? b.replace(/\\:/g, ':') : b);
 const eventField = k => /date|contact|recruiter/i.test(k);
 /**
  * Pure plan only. Caller must fetch schema/current immediately before journaling and
@@ -43,8 +46,8 @@ export function planUpdate(base, current, intent, ownership) {
     if (current?.duplicateMarkers?.includes(ownership.section)) conflicts.push('duplicate_body_marker');
     else {
       const old = base?.sections?.[ownership.section] ?? null, now = current?.sections?.[ownership.section] ?? null;
-      if (!equal(now, intent.body)) {
-        if (!equal(old, now)) conflicts.push('body');
+      if (!bodyEqual(now, intent.body)) {
+        if (!bodyEqual(old, now)) conflicts.push('body');
         else { expectedSections[ownership.section] = now; sections[ownership.section] = intent.body; }
       }
     }
@@ -77,7 +80,7 @@ export function reconcileOperation(operation, receipt, observations) {
     for (const [key, desired] of Object.entries(operation[section])) {
       const now = observed[section]?.[key] ?? null;
       // Relations may acquire extra human-added versions after the write.
-      const applied = section === 'properties' && key === 'CV Version' && Array.isArray(now) ? desired.every(v => now.includes(v)) : equal(now, desired);
+      const applied = section === 'properties' && key === 'CV Version' && Array.isArray(now) ? desired.every(v => now.includes(v)) : section === 'sections' ? bodyEqual(now, desired) : equal(now, desired);
       if (applied) continue;
       if (equal(now, operation[expectedKey][key])) remainingPatch[section][key] = desired;
       else conflicts.push(`${section}.${key}`);

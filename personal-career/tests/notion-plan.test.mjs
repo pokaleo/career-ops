@@ -52,3 +52,10 @@ test('partial readbacks remain pending; conflicting touched values stop updates'
   partial.properties['CV Version'] = ['human-only'];
   assert.equal(reconcileOperation(p, {}, [partial]).state, 'conflict');
 });
+test('Notion transport escapes of literal colons do not cause false body conflicts', () => {
+  const p = planUpdate(null, null, { ...intent({ Company: 'Example' }), body: 'Identity: ats:example:123' }, ownership);
+  const observed = { pageId: 'new', operationId: p.operationId, properties: p.properties, sections: { 'career-workflow': 'Identity: ats\\:example\\:123' } };
+  assert.equal(reconcileOperation(p, {}, [observed]).state, 'verified');
+  observed.sections['career-workflow'] = 'Identity: ats\\:example\\:456';
+  assert.equal(reconcileOperation(p, {}, [observed]).state, 'conflict');
+});
