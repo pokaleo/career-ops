@@ -279,3 +279,6 @@ data/interview-prep/
 .next/
 web/.next/
 web/out/
+
+# Track the generic extension preservation declaration.
+!config/local-paths.txt
